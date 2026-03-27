@@ -1,7 +1,7 @@
 # n8n Automation Projects
 
 ## 📌 Overview
-This repository contains two **n8n-based automation projects** that combine workflow orchestration, AI models, databases, and external integrations to solve practical business and content problems.
+This repository contains two **n8n-based automation projects** that combine workflow orchestration, AI models, databases, and external integrations to solve practical business and content problems. The project focuses on system architecture design and workflow automation using n8n, integrating third-party APIs, databases, and cloud services. It also demonstrates foundational knowledge of RAG, vector databases.
 
 The projects currently included are:
 
@@ -24,7 +24,7 @@ Build a trend-driven AI content pipeline that helps identify viral TikTok patter
 - **Workflow Orchestration:** n8n
 - **AI Models:** Google Gemini, Google Veo 3.1
 - **Data Scraping:** Apify TikTok Scraper
-- **Database:** PostgreSQL / Supabase
+- **Database:** PostgreSQL (Supabase)
 - **Storage & Tracking:** Google Cloud Storage, Google Sheets
 
 ### ⭐ Strengths

@@ -99,6 +99,32 @@ Generate new AI videos based on viral patterns and prepare them for publishing.
 
 ---
 
+## ⚙️ Setup (For Demo Only)
+> This project is not intended to run fully without proper credentials.
+
+### Requirements:
+- n8n installed
+- PostgreSQL database
+- Supabase project
+- Google cloud platform setup
+- API keys:
+  - Gemini
+  - Mistral OCR
+
+### Steps:
+1. Import the workflow JSON into n8n
+2. Configure credentials:
+   - PostgreSQL
+   - Supabase
+   - Google cloud platform (Required an account enabling billing function to use Veo3)
+   - Apify
+   - Google sheet (Act as a triggered to execute uploading process)
+   - Buffer and Zapier (to support automatically upload video to tiktok)
+   - Google API
+3. Deploy webhook endpoint
+4. Connect to Messenger webhook
+
+
 ## 🛠️ Tech Stack
 
 - **Workflow Orchestration:** n8n  
@@ -113,11 +139,6 @@ Generate new AI videos based on viral patterns and prepare them for publishing.
 ---
 
 ## 🚀 Reliability & Engineering Considerations
-
-### 🔒 Rate Limit Handling
-- Built-in throttling for:
-  - Apify API
-  - LLM API calls
 
 ### 📦 Data Validation
 - Structured Output Parser enforces strict JSON schema
