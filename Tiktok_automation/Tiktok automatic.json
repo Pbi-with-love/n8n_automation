@@ -1,0 +1,1115 @@
+{
+  "name": "Tiktok automatic",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "GdWCkxBtKWOsKjdch",
+          "mode": "list",
+          "cachedResultName": "TikTok Scraper (clockworks/tiktok-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/GdWCkxBtKWOsKjdch/input"
+        },
+        "customBody": "={\n    \"commentsPerPost\": 0,\n    \"excludePinnedPosts\": false,\n    \"hashtags\": [\n      \"{{ $json.hashtag1 }}\",\n      \"{{ $json.hashtag2 }}\", \n      \"{{ $json.hashtag3 }}\"\n    ],\n    \"maxFollowersPerProfile\": 0,\n    \"maxFollowingPerProfile\": 0,\n    \"maxRepliesPerComment\": 0,\n    \"proxyCountryCode\": \"None\",\n    \"resultsPerPage\": 3,\n    \"scrapeRelatedVideos\": false,\n    \"shouldDownloadAvatars\": false,\n    \"shouldDownloadCovers\": false,\n    \"shouldDownloadMusicCovers\": false,\n    \"shouldDownloadSlideshowImages\": false,\n    \"shouldDownloadVideos\": false\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        464,
+        -352
+      ],
+      "id": "18290696-ba73-4b96-950e-136a5787b1b5",
+      "name": "Run an Actor and get dataset",
+      "credentials": {
+        "apifyApi": {
+          "id": "g1SubtIJ6cpczYGN",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "videos",
+          "mode": "list",
+          "cachedResultName": "videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_ad": "={{ $json.isAd }}",
+            "video_id": "={{ $json.id }}",
+            "caption": "={{ $json.text }}",
+            "video_url": "={{ $json.webVideoUrl }}",
+            "language": "={{ $json.textLanguage }}",
+            "created_at": "={{ $json.createTimeISO }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "video_url",
+              "displayName": "video_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "language",
+              "displayName": "language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_ad",
+              "displayName": "is_ad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scraped_at",
+              "displayName": "scraped_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        688,
+        -352
+      ],
+      "id": "c376c42a-58a1-4fff-8829-bfdde9023c7f",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "n2zZl8Dw3dFnw5ph",
+          "name": "Tiktok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are a TikTok AI content creator.\n\nUse RAG to search for the hottest hashtags related to AI-generated videos in the last 24 hours. Prioritize hashtags used in storytelling AI anime videos and AI animal dancing videos. All content must related to animal AI\n\nOnly return hashtags that have more than 100000 views or uses.\n\nReturn the result as JSON with the 3 hottest hashtags.\n\nFormat:\n{\n  \"hashtags\": [\n    \"#hashtag1\",\n    \"#hashtag2\",\n    \"#hashtag3\"\n  ]\n}\n\nReturn ONLY valid JSON. No explanation."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -80,
+        -352
+      ],
+      "id": "42ab66c5-3711-46f7-b3da-32e612cf7747",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -176
+      ],
+      "id": "11a2c8fb-f237-4adc-af6b-80d1bcea2516",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "sKUEkopc9ONNNcOb",
+          "name": "api weather"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// generate random 8-digit session id\nconst sessionId = Math.floor(10000000 + Math.random() * 90000000).toString();\n\n// message prompt\nconst message = \"Find hot TikTok trends for AI-generated videos in the last 24 hours. Focus on storytelling AI videos and AI animal dancing.\";\n\n// output\nreturn [\n  {\n    json: {\n      sessionId: sessionId,\n      message: message\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        -352
+      ],
+      "id": "7db16a08-ddbc-4aab-9aa4-a78578e38776",
+      "name": "Prepare sessionId and msg"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output\n\nconst cleaned = raw.replace(/```json|```/g, \"\").trim();\n\nconst data = JSON.parse(cleaned);\n\n\nconst result = {\n  hashtag1: data.hashtags[0] || null,\n  hashtag2: data.hashtags[1] || null,\n  hashtag3: data.hashtags[2] || null\n};\n\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -352
+      ],
+      "id": "0bfc5f49-1d61-4200-b1bb-4f1e12dff56d",
+      "name": "Split AI output"
+    },
+    {
+      "parameters": {
+        "content": "# Get top hashtag and video hot trend related and storing into postgreSQL\n## Execute -> Use gemini get hot hashtags about AI video in 24 hours -> Find hot video on tiktok related to that hashtags -> Storing to database",
+        "height": 512,
+        "width": 1472,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -416,
+        -496
+      ],
+      "typeVersion": 1,
+      "id": "e9544755-3c9f-4c71-ab26-445a8d0782cc",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT caption, video_url\nFROM videos\nORDER BY created_at DESC\nLIMIT 3;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -496,
+        384
+      ],
+      "id": "601f8354-0ca1-4ec2-8c3c-3f65f0f66168",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "n2zZl8Dw3dFnw5ph",
+          "name": "Tiktok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "=Describe the video in detail. Include a clear analysis of the environment, scene context, and characters. If a watermark appears in the video, ignore it and do not mention or describe it in the output.",
+        "videoUrls": "={{ $json.video_url }}",
+        "options": {
+          "maxOutputTokens": 200000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        64,
+        384
+      ],
+      "id": "f00e6c77-5a6a-4cca-9e5f-2138ea0a7bde",
+      "name": "Analyze video",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "cznRJBst7pkEyYE7",
+          "name": "tiktok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.content.parts[0].text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Role: You are an AI content analyzer and video prompt generator.\n\nInput: A detailed description of a video.\n\nTask: Analyze the input thoroughly and generate a new video prompt (output variable: \"veo3_prompt\") that could be used to create a video similar in content and style.\n\nRequirements:\n\nPreserve all key elements of the scene:\n\nEnvironment and background (location, objects, lighting, perspective)\n\nCharacters (appearance, clothing, hair, position in frame, actions)\n\nActions or movements (dancing, gestures, interactions)\n\nInclude any visible props, objects, or text overlays mentioned.\n\nInclude hashtags, themes, or style cues from the input if relevant.\n\nReflect the mood, energy, and style of the original video.\n\nIgnore any watermarks or branding that should not appear.\n\nOutput a single, concise yet detailed sentence or paragraph suitable for a video-generation AI.\n\nEnsure the generated prompt stays strictly on-topic with the input and does not introduce unrelated content.\n\nCreatively generate an engaging and fitting caption based on the video's mood, actions, and narrative.\n\nThe content must be related to the video, do not create different content. For example: content about animal, fruit AI do not make an action people video\n\nOutput Format (JSON):\n\nJSON\n{\n  \"veo3_prompt\": \"...\",\n  \"caption\": \"...\",\n  \"hashtags\": \"...\"\n}\nExample:\nIf the input describes a dancing woman in a modern office with hashtags and text overlays, the \"veo3_prompt\" should describe a video with a similar office setting, character, dance style, and on-screen text, without mentioning watermarks. The \"caption\" should be a creative, catchy sentence fitting the office dance vibe."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        256,
+        368
+      ],
+      "id": "c69436a7-f81f-4d6a-b008-a8893d24cfc9",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        160,
+        592
+      ],
+      "id": "c82d25ba-2121-4c5a-b109-51a8e6cfba3a",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "cznRJBst7pkEyYE7",
+          "name": "tiktok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "You are a Think Tool AI node. \n\nInput: a detailed description of a video (including environment, characters, actions, text overlays, and hashtags).\n\nTask: Analyze the input carefully and return your reasoning. Identify and list:\n\n1. Key scene elements (environment, background objects, lighting, perspective)\n2. Main characters (appearance, clothing, hair, position, and actions)\n3. Movements or interactions (dancing style, gestures, trends)\n4. Text overlays, hashtags, or style cues\n5. Mood, energy, or overall video style"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        608
+      ],
+      "id": "2de7cb26-8320-4684-9c36-285ddbcf3688",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"veo3_prompt\": \"String\",\n  \"hashtags\": \"String\",\n  \"caption\": \"String\"\n}",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        592
+      ],
+      "id": "b163d240-0a6e-4ce6-99f4-cfdaff443b18",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "url": "=https://storage.googleapis.com/{YOUR-BUCKET}/{{ $json.objectPath }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Edit Fields').item.json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2736,
+        368
+      ],
+      "id": "0a7577d8-5271-40bb-b13b-570814b9cef2",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1936,
+        368
+      ],
+      "id": "7e698e7e-70ce-4ad7-a074-4d01c9528e0b",
+      "name": "Wait",
+      "webhookId": "4fd2edda-f001-4615-b77b-06d23f811d9e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://us-central1-aiplatform.googleapis.com/v1/projects/{YOUR-PROJECT-ID}/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001:fetchPredictOperation ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Edit Fields').item.json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"operationName\": \"projects/{YOUR-PROJECT-ID}/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001/operations/{{ $('Take the path and operationId').item.json.operationId }}\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2128,
+        368
+      ],
+      "id": "7a18f871-7a46-4ede-944c-0c051677b9e7",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { GoogleAuth } = require('google-auth-library');\n\n// Tạo request lấy Token tự động từ cấu hình môi trường\nconst auth = new GoogleAuth({\n    scopes: ['https://www.googleapis.com/auth/cloud-platform']\n});\n\nconst client = await auth.getClient();\nconst tokenResponse = await client.getAccessToken();\n\nreturn [{\n    json: {\n        accessToken: tokenResponse.token,\n        veo3_prompt: $input.first().json.output.veo3_prompt,\n        caption: $input.first().json.output.caption,\n        hashtags: $input.first().json.output.hashtags\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        368
+      ],
+      "id": "3cb8f98e-97e5-4342-b968-9ab7dac30244",
+      "name": "Get access token"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a168ceb5-1397-411b-a59d-1ce6684ebc0a",
+              "name": "accessToken",
+              "value": "={{ $json.accessToken }}",
+              "type": "string"
+            },
+            {
+              "id": "af96c293-289c-4d10-b513-2fea3247a980",
+              "name": "output.veo3_prompt",
+              "value": "={{ $json.veo3_prompt }}",
+              "type": "string"
+            },
+            {
+              "id": "62914fa2-8391-449e-82eb-358901bb220d",
+              "name": "output.hashtags",
+              "value": "={{ $json.hashtags }}",
+              "type": "string"
+            },
+            {
+              "id": "76e7db2f-0ce2-4369-91fe-77df3605eb4f",
+              "name": "output.caption",
+              "value": "={{ $json.caption }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        368
+      ],
+      "id": "52b77754-3ae3-499d-b036-8e9e7c9d0b6f",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "const uri = $input.first().json.response.videos[0].gcsUri;\n\nconst cleanUri = uri.replace(\"gs://\", \"\");\n\n\nconst parts = cleanUri.split(\"/\");\n\nconst bucketName = parts.shift(); \n\n\nconst objectPath = parts.join(\"/\");\n\nreturn {\n  json: {\n    originalUri: uri,\n    bucket: bucketName,         \n    folderId: parts[0],          \n    fileName: parts[parts.length - 1], \n    objectPath: objectPath       \n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        368
+      ],
+      "id": "bf7ebed2-eef6-477f-b967-fccb89eafbea",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99bea188-4db7-4ee5-96a2-f29a8b8879e2",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "882acd72-55bd-4c74-8af3-0e1fe3c91e89",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2336,
+        368
+      ],
+      "id": "075fb56e-31e5-42a9-9e61-ab060f00a343",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "{YOUR-GOOGLESHEET-ID}",
+          "mode": "list",
+          "cachedResultName": "n8n tiktok",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/{YOUR-GOOGLESHEET-ID}/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Trang tính1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/{YOUR-GOOGLESHEET-ID}/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Title": "={{ $('Edit Fields').item.json.output.caption }}",
+            "Video URL": "=https://storage.googleapis.com/{YOUR-BUCKET}/{{ $('HTTP Request2').item.json.objectPath }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Video URL",
+              "displayName": "Video URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1664,
+        576
+      ],
+      "id": "6f046060-67ba-408d-b634-5cf73b722b14",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "dVAFkoMUcFlY8hLp",
+          "name": "n8n tiktok oAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -16,
+        -160
+      ],
+      "id": "79d5c525-04f3-4930-96e0-748db66841d3",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "n2zZl8Dw3dFnw5ph",
+          "name": "Tiktok"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -128,
+        384
+      ],
+      "id": "815955c9-bd37-40ab-825d-c53bd9ebbfaa",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a0a17aaf-3f42-4758-af7a-8e1383ee2952",
+              "leftValue": "={{ $json.counter }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        368
+      ],
+      "id": "7efd50bd-dd0f-40ce-8a97-448ed4556867",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n\nlet totalProcessed = staticData.totalProcessed || 0;\n\ntotalProcessed++;\n\nstaticData.totalProcessed = totalProcessed;\n\nreturn {\n  counter: totalProcessed\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        368
+      ],
+      "id": "90601c3b-de71-4ae7-8c23-4de76f961255",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n\nlet totalProcessed = 0;\n\nstaticData.totalProcessed = totalProcessed;\n\nreturn {\n  counter: totalProcessed\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        576
+      ],
+      "id": "b462bcaf-3b3c-4b97-ad16-29a261c068bf",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "content": "# Using veo3 to create video and automatically upload tp tiktok\n## Get access token, prompt for veo3, caption, hashtags -> Loop for 3 times (veo3 only create a maximum 8 seconds each time) -> Using veo3 to create video -> Storing video into google cloud bucket and its infomation into google sheet -> Auto upload to tiktok",
+        "height": 592,
+        "width": 2064
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        848,
+        208
+      ],
+      "typeVersion": 1,
+      "id": "e796c76f-5f57-4424-b32f-3ee6b101a6c4",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# Analyze the hot trend video in tiktok and create content and prompt for veo\n## Execute -> get content in postgreDB (caption, URL) -> analyze video to retrieve the content in the video -> LLM based on content in the video and generate prompt for VEO to create video ",
+        "height": 688,
+        "width": 1536
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -784,
+        208
+      ],
+      "typeVersion": 1,
+      "id": "099521c7-8193-46f2-b691-3484a482220f",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "caption",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        384
+      ],
+      "id": "1fd25b8d-6967-4b69-9d7e-63b96294c503",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        384
+      ],
+      "id": "86efe433-4b00-4376-97cc-47feec6704b7",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://us-central1-aiplatform.googleapis.com/v1/projects/{YOUR-PROJECT-ID}/locations/us-central1/publishers/google/models/veo-3.1-fast-generate-001:predictLongRunning",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Edit Fields').item.json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    \"instances\": [\n      Object.assign(\n       {\n          \"prompt\": $('Edit Fields').item.json.output.veo3_prompt + \" \" + $('Edit Fields').item.json.output.caption + \" \" + $('Edit Fields').item.json.output.hashtags\n       },\n        $json.counter > 1 ? { \n          \"video\": {\n            \"gcsUri\": $('HTTP Request2').item.json.originalUri, \n            \"mimeType\": \"video/mp4\"\n          } \n        } : {}\n      )\n    ],\n    \"parameters\": {\n      \"storageUri\": \"gs://{YOUR-BUCKET}/Step\" + ($runIndex + 1) + \"/\",\n      \"sampleCount\": 1,\n      \"aspectRatio\": \"9:16\",\n      \"resolution\": \"720p\",\n      \"generateAudio\": true\n    }\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1520,
+        368
+      ],
+      "id": "1a34825e-61a8-485b-bf4d-fd7fa3c2b520",
+      "name": "Create video veo3"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst fullPath = $input.first().json.name;\n\nconst operationId = fullPath.split('/').pop();\n\nreturn {\n  json: {\n    originalPath: fullPath,\n    operationId: operationId \n  }\n};\n\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        368
+      ],
+      "id": "5e89ed94-5578-4f5e-951e-6f1cd1011639",
+      "name": "Take the path and operationId"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run an Actor and get dataset": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Split AI output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare sessionId and msg": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split AI output": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor and get dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze video": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Get access token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get access token": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Analyze video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Create video veo3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create video veo3": {
+      "main": [
+        [
+          {
+            "node": "Take the path and operationId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Take the path and operationId": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fa661f90-9d93-4e64-b1ad-afc3910110b0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b7abe1063873776ac451b5859b44ddb514a487610d0aa1a6def9f718112f4743"
+  },
+  "id": "VEXICtyNOtVLNIaH",
+  "tags": []
+}

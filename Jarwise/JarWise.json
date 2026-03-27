@@ -1,0 +1,1883 @@
+{
+  "name": "JarWise",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=This is message from user: {{ $json.text }}\n\nYou need to answer this question based documents provided in vector DB, don't use your knowledge only",
+        "options": {
+          "systemMessage": "=You are using as facebook chatbot, not only gemini chatbot\n\nDo not perform any reasoning, decision-making, or other actions before you have accessed all the necessary tools. For example: when you handle request sending image, always accept it because order service will handle it, don't need to tell user provide more information, they can provide only image about invoice\n\nYou are strictly required to access all the specified tools before performing any operation other than reading the user input text. Accessing these tools is mandatory and must be done first.\n\nOnly after accessing all tools, you may proceed with further processing.\n\nYou must first access the following documents from the vector database before doing anything else:\n\nJarwise_Interaction_Flow – defines how to interact with the user.\n\nJarwise_Knowledge – financial education & 6 Jars concepts.\n\nA query postgre SQL for statistic value:\nInvoice_Calculation – contains all invoice results; access via queries.\n\nRules:\n\nNever fabricate information; always base answers on the accessed documents.\n\nAlways follow the interaction flow and guidance from the documents.\n\nIf spending data is available (item_name, amount, jar_type, date):\n\nCalculate total per jar\n\nShow spending percentage per jar\n\nCompare with ideal targets\n\nProvide friendly, helpful insights\n\nReply in English, friendly and positive, ≤4000 characters.\n\nIf user says “I want to send invoice”, switch to invoice submission mode and request invoice input.\n\nIf user says “Finish submitting invoice”, confirm no more invoices will be accepted.\n\nIf user sends an image of an invoice, acknowledge it but instruct them to press “I want to send invoice” to enter invoice submission mode."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        240
+      ],
+      "id": "3568aa72-34be-4a11-b0a7-e37bac043854",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        464,
+        -16
+      ],
+      "id": "27ce7c88-767c-49b1-8d24-de9b7702ffc0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "6231bedf-11a4-461f-841f-dbca1f370bbf",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        400
+      ],
+      "id": "7291db3c-cbc1-4b3d-9fed-ec80f3c37f76",
+      "name": "Messenger",
+      "webhookId": "6231bedf-11a4-461f-841f-dbca1f370bbf"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/958720253997853/messages/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "{{FB_PAGE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2784,
+        208
+      ],
+      "id": "1c65fb4d-8f46-41d6-b2b8-80e70c1faa14",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipientId = $('Messenger').first().json.body.entry[0].messaging[0].sender.id\n// Text cần gửi (có thể lấy từ AI hoặc node trước)\nlet text = $input.first().json.output.trim();\nconst limit = 2000;\n\nlet parts = [];\nwhile (text.length > limit) {\n    // Ưu tiên cắt tại dấu xuống hàng trước limit\n    let cutIndex = text.lastIndexOf('\\n', limit);\n\n    // Nếu không có dấu xuống hàng, fallback sang khoảng trắng\n    if (cutIndex === -1) cutIndex = text.lastIndexOf(' ', limit);\n\n    // Nếu vẫn không có, cắt cứng theo limit\n    if (cutIndex === -1) cutIndex = limit;\n\n    parts.push(text.slice(0, cutIndex).trim());\n    text = text.slice(cutIndex).trim();\n}\n\nif (text.length > 0) parts.push(text);\n\n// Trả ra nhiều item\nreturn parts.map(p => ({\n  json: {\n    data: {\n      recipient: { id: recipientId },\n      message: { text: p }\n    }\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        208
+      ],
+      "id": "33eb91e5-b8d9-41ea-8d59-a746c4f6ce85",
+      "name": "Full response"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here are the last text history messages (ordered from newest to oldest, top to bottom, up to 5 previous messages):\n{{ $json.message }}\n\n",
+        "options": {
+          "systemMessage": "=You are a permission checker for an invoice image processing chatbot.\n\nRules for scanning:\n\n1. Messages are scanned from top to bottom.\n\n2. If you find \"I want to send invoice\" → output exactly: PERMIT and stop scanning immediately.\n\n3. If you find \"I don't want to send invoice\" → output exactly: DENY and stop scanning immediately.\n\n4. If the message is unrelated → skip and continue scanning.\n\n5. If no matching message is found after scanning all:\n   a. If the current received message is an image from the user and no prior \"I want to send invoice\" was found → output exactly: DENY\n   b. Otherwise → output nothing (empty response).\n\nOutput rule:\n\n- Only output PERMIT or DENY exactly as above.\n- Never output anything else.\n\nFew-shot examples:\n\nExample 1:\nUser messages (newest to oldest):\n1. I want to send invoice\n2. Hello\n3. How are you?\n\nOutput: PERMIT\n\nExample 2:\nUser messages (newest to oldest):\n1. [image sent]\n2. User says \"I want to send invoice\"\n\nOutput: PERMIT\n\nExample 3:\nUser messages (newest to oldest):\n1. [image sent]\n2. User messages \"Hello there\"\n\nOutput: DENY\n\nExample 4:\nUser messages (newest to oldest):\n1. I don't want to send invoice\n2. [image sent]\n\nOutput: DENY"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        736
+      ],
+      "id": "117a9632-4091-45e6-bc46-1d47ab22d178",
+      "name": "AI Agent1",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Messenger').item.json.body.entry[0].messaging[0].sender.id }}",
+        "tableName": "=n8n_chat_histories"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        496
+      ],
+      "id": "62b138ea-89e4-4113-a912-025bf072469c",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.text }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "id": "66e87ac9-fea0-4562-8cfd-86e4e77f16f8"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7a483fa1-09fd-4687-9c25-b7398803e918",
+                    "leftValue": "={{ $('Messenger').item.json.body.entry[0].messaging[0].message.attachments[0].type }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1536,
+        304
+      ],
+      "id": "a21bdbd4-2fe7-4158-88a8-389302630697",
+      "name": "Switch1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipientId = $('Code1').first().json.data[0].json.body.entry[0].messaging[0].sender.id\n\n// Lấy JSON object\nconst invoiceObj = $input.first().json.output;\n\n// Chuyển thành string với indent 2, sau đó replace \\n thành newline thật\nlet invoiceOutput = JSON.stringify(invoiceObj, null, 2);\n// Replace các ký tự escape \\n thành newline thực\ninvoiceOutput = invoiceOutput.replace(/\\\\n/g, '\\n');\n\nreturn [\n  {\n    json: {\n      data: {\n        recipient: { id: recipientId },\n        message: { \n          text: `Thank you, I have received your invoice:\\n${invoiceOutput}` \n        }\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        736
+      ],
+      "id": "5030e59c-5b4c-48da-8094-94f68396f92c",
+      "name": "Response after OCR complete"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/958720253997853/messages/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "{{FB_PAGE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4352,
+        752
+      ],
+      "id": "9a855e67-d5b4-4bcd-a9af-d0b458a0f4ee",
+      "name": "Send Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f3c17b5e-2d4f-4f9b-b79a-7527214ccc42",
+              "leftValue": "={{ $json.exists }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        464,
+        208
+      ],
+      "id": "4afdff83-cca5-4d8d-8196-71e37ac36697",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (\n  SELECT 1\n  FROM users\n  WHERE user_id = '{{ $json.body.entry[0].messaging[0].sender.id }}'\n) AS exists;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        352
+      ],
+      "id": "64da9c4e-7151-4162-a82e-11708464f507",
+      "name": "Check if user already exist",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": []
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        368
+      ],
+      "id": "8e7103e4-db5c-426c-9124-bc9e51c8e30b",
+      "name": "Information Storage"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Code1').item.json.data[0].json.body.entry[0].messaging[0].message.attachments[0].payload.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2736,
+        752
+      ],
+      "id": "3a0ffe52-7f3d-4888-9efc-eab415bbbc95",
+      "name": "Get Image",
+      "alwaysOutputData": false,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO users (user_id, \"created_at\")\nVALUES ('{{ $('Messenger').item.json.body.entry[0].messaging[0].sender.id }}', NOW());\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        608,
+        448
+      ],
+      "id": "1fd1c3d0-5c96-49c8-bb1a-1fbaafa35db5",
+      "name": "Create new user",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2528,
+        208
+      ],
+      "id": "1de97336-24a7-429d-bac5-be61280ddd91",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipientId = $('Code1').first().json.data[0].json.body.entry[0].messaging[0].sender.id\n\nreturn [\n  {\n    json: {\n      data: {\n        recipient: { id: recipientId },\n        message: { \n          text: \"Please type 'I want to submit an invoice' to switch to invoice submission mode and 'Finish submitting invoice' when you are done to return to analysis mode.\"\n        }\n      }\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        976
+      ],
+      "id": "d9c45464-b907-4cd5-8af2-16d5b8da68fe",
+      "name": "Reject OCR process"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "PERMIT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d5f6a010-ddb6-4634-a8bb-1a4e5203c75f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a6c7bade-531b-48f1-bced-3568ac6b214f",
+                    "leftValue": "={{ $json.output }}",
+                    "rightValue": "DENY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2432,
+        736
+      ],
+      "id": "81b9e6c5-2968-4b22-b0ba-4a20ff996d8b",
+      "name": "Check if AI allow to send invoice"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/958720253997853/messages/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "{{FB_PAGE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1232,
+        448
+      ],
+      "id": "41c6b573-3abf-4ee9-bf97-df54e95d1fae",
+      "name": "Send Response2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipientId = $('Information Storage').first().json.body.entry[0].messaging[0].sender.id\n\nreturn [\n  {\n    json: {\n      data: {\n        recipient: { id: recipientId },\n        message: { \n          text: \"Hello there, it’s great to meet you! 🎉\\n\\nI’m Jarwise, your personal financial assistant, created to help you manage your money more effectively and intelligently.\\n\\nI’m built based on the famous Six Jars Method by T. Harv Eker, which helps you divide your income into different financial jars such as:\\n• Necessities\\n• Financial Freedom\\n• Education\\n• Play\\n• Long-term Savings\\n• Giving\\n\\nMy goal is to help you achieve your personal financial goals, from managing daily expenses to building wealth and financial freedom.\\n\\nYou can share your expense receipts with me, and I will help you categorize them into the appropriate jars, calculate your total spending, and provide useful insights.\\n\\nLet’s start your financial management journey together! 💰\\n\\n---\\n\\nTo help Jarwise provide you with the best advice, could you tell me a little about yourself?\\n\\n• What is your name (optional)?\\n• What is your current financial situation? (e.g., student, employed, freelancer)\\n• What is your approximate monthly income range?\\n• Have you ever used the Six Jars Method before? If not, would you like a quick introduction to it?\"\n        }\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        448
+      ],
+      "id": "a7b55878-e94a-43fb-bff3-e7dc7bf0d586",
+      "name": "Reject OCR process1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/958720253997853/messages/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "{{FB_PAGE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3792,
+        1264
+      ],
+      "id": "e38ef685-0b31-42e6-aa58-6393f79adfab",
+      "name": "Send Response3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const recipientId = $('Switch1').first().json.infoBody.entry[0].messaging[0].sender.id\n\nreturn [\n  {\n    json: {\n      data: {\n        recipient: { id: recipientId },\n        message: { \n          text: \"Invalid image, please try again\" \n        }\n      }\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        1120
+      ],
+      "id": "b402c910-8487-4ddb-b784-51ec0e052a2c",
+      "name": "Reject OCR process2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c5279e92-67d6-483d-b6b2-2c26eec2dbf6",
+              "leftValue": "={{ $json.pages[0].markdown }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3312,
+        752
+      ],
+      "id": "58b49753-37cf-43b6-b343-a17d433b07d8",
+      "name": "Check If Valid Image"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "EVENT_RECEIVED",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -512,
+        432
+      ],
+      "id": "12ccaba2-0a13-447a-aa5a-9cde22bb6d73",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM facebook_chat_histories\nWHERE message_id = '{{ $('Information Storage').item.json.body.entry[0].messaging[0].message.mid }}';\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        704,
+        192
+      ],
+      "id": "5cfe41bc-0348-4229-bb05-220b6844cb74",
+      "name": "Check exist message",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1287f8af-6e7e-495c-90f7-6c402a351f93",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        192
+      ],
+      "id": "ad31dbc1-baa6-403b-8761-df5038235d19",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "facebook_chat_histories",
+          "mode": "list",
+          "cachedResultName": "facebook_chat_histories"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].sender.id }}",
+            "recipient_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].recipient.id }}",
+            "message_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].message.mid }}",
+            "text": "={{ $('Messenger').item.json.body.entry[0].messaging[0].message.text }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recipient_id",
+              "displayName": "recipient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1168,
+        208
+      ],
+      "id": "052925f1-fe31-426a-b2cd-c39b66e67be3",
+      "name": "Insert to history messages",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM n8n_chat_histories\nWHERE session_id = '{{ $('Messenger').item.json.body.entry[0].messaging[0].sender.id }}'\nORDER BY created_at DESC\nLIMIT 5;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1680,
+        512
+      ],
+      "id": "61b39793-d13a-421f-8d91-d18da639e10a",
+      "name": "Check history message",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function Node\n\n// 1) Lấy toàn bộ items từ node trước (đã được SQL sort newest -> oldest)\nconst items = $input.all();\n\n// 2) Trích JSON\nconst records = items.map(i => i.json);\n\n// 3) Map thành các dòng \"ROLE: content\"\n// - ROLE: \"Bot\" nếu message.type === 'ai', \"User\" nếu === 'human', ngược lại \"Unknown\"\n// - Bỏ qua bản ghi không có message.content dạng string\nconst lines = records.map(r => {\n  const type = r?.message?.type;\n  const role =\n    type === 'ai' ? 'Bot' :\n    type === 'human' ? 'User' :\n    'Unknown';\n\n  const content = typeof r?.message?.content === 'string'\n    ? r.message.content.trim()\n    : '';\n\n  if (!content) return null;\n\n  return `${role}: ${content}`;\n}).filter(Boolean);\n\n// 4) Ghép thành chuỗi\nconst message = lines.join('\\n');\nconst data = $('Messenger').all()\n// 5) Trả ra 1 item duy nhất\nreturn [\n  {\n    json: {\n      message,\n      data\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        736
+      ],
+      "id": "abe0c893-6e77-4ed7-92dc-12d539bdf27e",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.data[0].json.body.entry[0].messaging[0].sender.id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2192,
+        960
+      ],
+      "id": "34e2d924-68de-498b-b437-a7e473b39461",
+      "name": "Postgres Chat Memory1",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "facebook_chat_histories",
+          "mode": "list",
+          "cachedResultName": "facebook_chat_histories"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].sender.id }}",
+            "recipient_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].recipient.id }}",
+            "message_id": "={{ $('Messenger').item.json.body.entry[0].messaging[0].message.mid }}",
+            "text": "={{ $('Messenger').item.json.body.entry[0].messaging[0].message.text }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recipient_id",
+              "displayName": "recipient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        800,
+        464
+      ],
+      "id": "a1bb9b14-39ac-47a3-b0a5-f890c6dc57ba",
+      "name": "Insert to history messages1",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentType": "image_url",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mistralAi",
+      "typeVersion": 1,
+      "position": [
+        2976,
+        752
+      ],
+      "id": "fb4a395a-6cfc-4911-81e3-eb8a2fd87f04",
+      "name": "Extract text",
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "18U33TBHJ4qbysb0",
+          "name": "Mistral Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2032,
+        944
+      ],
+      "id": "8e26c778-2ff2-4437-9d53-ab55c358b790",
+      "name": "Google Gemini Chat Model2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hpQnho9c7i0HwbaU",
+          "name": "main gemini"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        160,
+        1008
+      ],
+      "id": "104096a0-a7b6-49d4-bd91-d51b7bb351c5",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        736,
+        1216
+      ],
+      "id": "bea8cde4-6426-45d2-a507-df206b68efa5",
+      "name": "Supabase Vector Store",
+      "credentials": {
+        "supabaseApi": {
+          "id": "K7WEyrUMsNkBGknb",
+          "name": "jarwise"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        688,
+        1408
+      ],
+      "id": "9c984ca2-6273-4f83-be77-2e4cd4c0fe18",
+      "name": "Embeddings Google Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hpQnho9c7i0HwbaU",
+          "name": "main gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        1440
+      ],
+      "id": "478a75be-1681-4dce-b9cc-91ccd93511e4",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 50,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        976,
+        1632
+      ],
+      "id": "1696fdb9-04f5-44f0-b826-5251887042f2",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/1TZm4HfzF_aJbrDOFVe2Al0ixO5HKhai5b7qpMqzukZY/edit?hl=vi&tab=t.0#heading=h.w7c0glp3vg1y"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        448,
+        1232
+      ],
+      "id": "c36aa3fd-41ee-4944-a0b7-ae8ed92aa4c9",
+      "name": "Get a document",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "fFTy34SiQzC7HhT5",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "documents2",
+          "mode": "list",
+          "cachedResultName": "documents2"
+        },
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        816,
+        656
+      ],
+      "id": "abb6883c-8cd1-4f2c-a057-fae36c939186",
+      "name": "Supabase Vector Store1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "K7WEyrUMsNkBGknb",
+          "name": "jarwise"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        768,
+        848
+      ],
+      "id": "591ae572-31ab-46e4-9b9d-7a1789afb54d",
+      "name": "Embeddings Google Gemini1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hpQnho9c7i0HwbaU",
+          "name": "main gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        880
+      ],
+      "id": "e2681906-73bf-4e6d-8aab-4ae847380293",
+      "name": "Default Data Loader1"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 50,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        1072
+      ],
+      "id": "cdb74c21-35f2-4f20-86f0-a887f251c66b",
+      "name": "Recursive Character Text Splitter1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/1tdYomwiTwd9cHgU01WSiMo1oQ1RQPBr1wMshxsUIAMY/edit?tab=t.0"
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        528,
+        672
+      ],
+      "id": "30d5135a-1975-416d-b39b-e8e2e66fdbc4",
+      "name": "Get a document2",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "fFTy34SiQzC7HhT5",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2128,
+        576
+      ],
+      "id": "f4854417-accd-4ec9-be9a-ea56d784c4a9",
+      "name": "Embeddings Google Gemini2",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "sKUEkopc9ONNNcOb",
+          "name": "api weather"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2384,
+        592
+      ],
+      "id": "61b2664e-f7eb-43db-b25a-e89504c0f1c8",
+      "name": "Embeddings Google Gemini3",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "sKUEkopc9ONNNcOb",
+          "name": "api weather"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Retrieve rules for chatbot interaction",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "topK": 100,
+        "includeDocumentMetadata": false,
+        "options": {
+          "queryName": "match_documents"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        2112,
+        432
+      ],
+      "id": "e3a7adca-e9c6-41d3-837c-778b1bf5c395",
+      "name": "Jarwise_Knowledge",
+      "credentials": {
+        "supabaseApi": {
+          "id": "K7WEyrUMsNkBGknb",
+          "name": "jarwise"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Retrieve rules for chatbot interaction",
+        "tableName": {
+          "__rl": true,
+          "value": "documents2",
+          "mode": "list",
+          "cachedResultName": "documents2"
+        },
+        "topK": 100,
+        "includeDocumentMetadata": false,
+        "options": {
+          "queryName": "match_documents2"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        2368,
+        448
+      ],
+      "id": "fc34eaf5-cbfd-42cb-a494-172cd9be378f",
+      "name": "Jarwise_Interaction_Flow",
+      "credentials": {
+        "supabaseApi": {
+          "id": "K7WEyrUMsNkBGknb",
+          "name": "jarwise"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are given the OCR result from an invoice:\n\n{{ $json.pages[0].markdown }}\n\nYour task is to convert this OCR text into a clean, well-structured JSON format, eliminated all the unused data, just keep only the valuable data",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        3664,
+        736
+      ],
+      "id": "816d8331-4d63-4ded-8484-13738a2dabfe",
+      "name": "AI Agent2"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Code1').item.json.data[0].json.body.entry[0].messaging[0].sender.id }}",
+        "tableName": "n8n_ocr_processing_output"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        3792,
+        1024
+      ],
+      "id": "f1660f9e-32a5-42eb-856d-8c5d876e2caa",
+      "name": "Postgres Chat Memory2",
+      "credentials": {
+        "postgres": {
+          "id": "lC8yaCfqBlVtyKdD",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemma-3-27b-it",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3584,
+        928
+      ],
+      "id": "a4b97fd8-4bea-41bf-b3d8-1fed6f8151c2",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "sKUEkopc9ONNNcOb",
+          "name": "api weather"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        448
+      ],
+      "id": "c3a7f40f-48ae-441a-9c2b-b442e42d2fae",
+      "name": "main gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hpQnho9c7i0HwbaU",
+          "name": "main gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/958720253997853/messages/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "{{FB_PAGE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2912,
+        992
+      ],
+      "id": "595db65e-5ade-4348-92f9-7501c2f07cb6",
+      "name": "Send Response5"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Messenger": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Full response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Full response": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Check if AI allow to send invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check history message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response after OCR complete": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Check exist message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create new user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if user already exist": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Storage": {
+      "main": [
+        [
+          {
+            "node": "Check if user already exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Image": {
+      "main": [
+        [
+          {
+            "node": "Extract text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create new user": {
+      "main": [
+        [
+          {
+            "node": "Insert to history messages1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject OCR process": {
+      "main": [
+        [
+          {
+            "node": "Send Response5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if AI allow to send invoice": {
+      "main": [
+        [
+          {
+            "node": "Get Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject OCR process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject OCR process1": {
+      "main": [
+        [
+          {
+            "node": "Send Response2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject OCR process2": {
+      "main": [
+        [
+          {
+            "node": "Send Response3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Valid Image": {
+      "main": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject OCR process2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Information Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check exist message": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Insert to history messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert to history messages": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check history message": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert to history messages1": {
+      "main": [
+        [
+          {
+            "node": "Reject OCR process1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get a document2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a document": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader1": {
+      "ai_document": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter1": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader1",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a document2": {
+      "main": [
+        [
+          {
+            "node": "Supabase Vector Store1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Jarwise_Knowledge",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Google Gemini3": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Jarwise_Interaction_Flow",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jarwise_Knowledge": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jarwise_Interaction_Flow": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text": {
+      "main": [
+        [
+          {
+            "node": "Check If Valid Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent2": {
+      "main": [
+        [
+          {
+            "node": "Response after OCR complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory2": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "main gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "351cd696-9f7e-4e40-ba52-616b5f7013aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b7abe1063873776ac451b5859b44ddb514a487610d0aa1a6def9f718112f4743"
+  },
+  "id": "H5a1Efdh6QsExjav",
+  "tags": []
+}
